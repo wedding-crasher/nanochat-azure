@@ -12,8 +12,17 @@
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
-export NANOCHAT_BASE_DIR="$HOME/.cache/nanochat"
-mkdir -p $NANOCHAT_BASE_DIR
+export NANOCHAT_BASE_DIR="/data/nanochat"
+
+# Clean up previous run data
+if [ -d "$NANOCHAT_BASE_DIR" ]; then
+    echo "Cleaning up previous run data at $NANOCHAT_BASE_DIR..."
+    rm -rf "$NANOCHAT_BASE_DIR"
+fi
+
+# Create dir with sudo if needed (Azure VM /data is often root-owned)
+sudo mkdir -p "$NANOCHAT_BASE_DIR"
+sudo chown -R "$(whoami):$(whoami)" "$NANOCHAT_BASE_DIR"
 
 # -----------------------------------------------------------------------------
 # Python venv setup with uv
@@ -24,6 +33,8 @@ command -v uv &> /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 [ -d ".venv" ] || uv venv
 # install the repo dependencies
 uv sync --extra gpu
+# install NVSHMEM for PyTorch CUDA support
+uv pip install nvidia-nvshmem-cu12
 # activate venv so that `python` uses the project's venv instead of system python
 source .venv/bin/activate
 
@@ -65,10 +76,17 @@ python -m nanochat.dataset -n 8
 # See comment below for why 240 is the right number here
 python -m nanochat.dataset -n 240 &
 DATASET_DOWNLOAD_PID=$!
-# train the tokenizer with vocab size 2**16 = 65536 on ~2B characters of data
-python -m scripts.tok_train --max_chars=2000000000
-# evaluate the tokenizer (report compression ratio etc.)
-python -m scripts.tok_eval
+
+# Train tokenizer only if not already present (resume case: skip to avoid overwriting)
+TOKENIZER_FILE="$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl"
+if [ -f "$TOKENIZER_FILE" ]; then
+    echo "Tokenizer already exists at $TOKENIZER_FILE, skipping training..."
+else
+    # train the tokenizer with vocab size 2**16 = 65536 on ~2B characters of data
+    python -m scripts.tok_train --max_chars=2000000000
+    # evaluate the tokenizer (report compression ratio etc.)
+    python -m scripts.tok_eval
+fi
 
 # -----------------------------------------------------------------------------
 # Base model (pretraining)
@@ -86,7 +104,25 @@ wait $DATASET_DOWNLOAD_PID
 # The code will automatically use gradient accumulation to match the same effective batch size
 
 # pretrain the d20 model
-python -m scripts.base_train --depth=20 --run=$WANDB_RUN
+BASE_DEPTH=20
+
+# Auto-detect latest checkpoint and resume if exists
+RESUME_ARG=""
+CKPT_DIR="$NANOCHAT_BASE_DIR/base_checkpoints/d${BASE_DEPTH}"
+if [ -d "$CKPT_DIR" ]; then
+    LAST_MODEL=$(ls -1 "$CKPT_DIR"/model_*.pt 2>/dev/null | sort | tail -n 1 || true)
+    if [ -n "$LAST_MODEL" ]; then
+        BASENAME=$(basename "$LAST_MODEL")
+        STEP_STR=${BASENAME#model_}
+        STEP_STR=${STEP_STR%.pt}
+        RESUME_FROM_STEP=$(echo "$STEP_STR" | sed 's/^0*//')
+        RESUME_FROM_STEP=${RESUME_FROM_STEP:-0}
+        echo "Resuming base_train from step: $RESUME_FROM_STEP ($LAST_MODEL)"
+        RESUME_ARG="--resume_from_step=$RESUME_FROM_STEP"
+    fi
+fi
+
+python -m scripts.base_train --depth=$BASE_DEPTH --run=$WANDB_RUN --save_every=500 $RESUME_ARG
 # evaluate the model on a larger chunk of train/val data and draw some samples
 python -m scripts.base_loss
 # evaluate the model on CORE tasks

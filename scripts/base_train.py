@@ -77,8 +77,17 @@ synchronize = torch.cuda.synchronize if device_type == "cuda" else lambda: None
 get_max_memory = torch.cuda.max_memory_allocated if device_type == "cuda" else lambda: 0
 
 # wandb logging init
-use_dummy_wandb = run == "dummy" or not master_process
-wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat", name=run, config=user_config)
+# If WANDB_RUN_ID is set, resume logging to that run (even if run=="dummy")
+wandb_run_id = os.environ.get("WANDB_RUN_ID")
+use_dummy_wandb = (run == "dummy" and not wandb_run_id) or not master_process
+if use_dummy_wandb:
+    wandb_run = DummyWandb()
+elif wandb_run_id:
+    # Resume existing wandb run by ID (use "allow" to create if not exists)
+    wandb_run = wandb.init(project="nanochat", id=wandb_run_id, resume="allow", config=user_config)
+else:
+    # Start new wandb run
+    wandb_run = wandb.init(project="nanochat", name=run, config=user_config)
 
 # Tokenizer will be useful for evaluation, also we need the vocab size
 tokenizer = get_tokenizer()
