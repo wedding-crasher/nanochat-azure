@@ -46,13 +46,16 @@ log "백업할 파일 수: $CHECKPOINT_COUNT"
 DISK_USAGE=$(du -sh "$SOURCE_DIR" 2>/dev/null | cut -f1)
 log "데이터 크기: $DISK_USAGE"
 
+# Azure Managed Identity 토큰 갱신 (만료 방지)
+log "Azure 인증 확인 중..."
+export AZCOPY_AUTO_LOGIN_TYPE=MSI
+azcopy login --identity 2>&1 | tee -a "$LOG_FILE"
+
 log "azcopy sync 시작..."
 START_TIME=$(date +%s)
 
-# Azure Managed Identity를 사용하여 인증
 # 타임스탬프 포함된 새 폴더로 백업 (덮어쓰기 방지)
 DEST_URL="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${BACKUP_FOLDER}"
-export AZCOPY_AUTO_LOGIN_TYPE=MSI
 log "Destination: ${CONTAINER_NAME}/${BACKUP_FOLDER}/"
 azcopy copy "$SOURCE_DIR/*" "$DEST_URL" \
     --recursive=true \

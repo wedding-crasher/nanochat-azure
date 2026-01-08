@@ -124,7 +124,7 @@ if [ -z "$RESUME_ARG" ]; then
 fi
 
 # Train base model (resume from checkpoint, model architecture loaded from checkpoint)
-python -m scripts.base_train --run=$WANDB_RUN $RESUME_ARG
+python -m scripts.base_train --run=$WANDB_RUN $RESUME_ARG --save_every=500
 python -m scripts.base_loss
 python -m scripts.base_eval --eval_set CORE
 
