@@ -211,6 +211,7 @@ if not resuming:
     min_val_bpb = float("inf")
     smooth_train_loss = 0 # EMA of training loss
     total_training_time = 0 # total wall-clock time of training
+    mfu = 0.0 # Model FLOPs Utilization
 else:
     step = meta_data["step"]
     loop_state = meta_data["loop_state"]
@@ -218,6 +219,7 @@ else:
     min_val_bpb = loop_state["min_val_bpb"]
     smooth_train_loss = loop_state["smooth_train_loss"]
     total_training_time = loop_state["total_training_time"]
+    mfu = 0.0 # Model FLOPs Utilization
 
 # -----------------------------------------------------------------------------
 # Training loop

@@ -126,12 +126,14 @@ fi
 # Train base model (resume from checkpoint, model architecture loaded from checkpoint)
 python -m scripts.base_train --run=$WANDB_RUN $RESUME_ARG --save_every=500
 python -m scripts.base_loss
-python -m scripts.base_eval --eval_set CORE
+python -m scripts.base_eval
 
 # -----------------------------------------------------------------------------
 # Midtraining
 
-python -m nanochat.dataset download_identity
+# Download identity conversations dataset
+curl -L -o $NANOCHAT_BASE_DIR/identity_conversations.jsonl https://karpathy-public.s3.us-west-2.amazonaws.com/identity_conversations.jsonl
+
 python -m scripts.mid_train --run=$WANDB_RUN
 python -m scripts.chat_eval -i mid
 

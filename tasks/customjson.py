@@ -14,7 +14,7 @@ class CustomJSON(Task):
     Example line: [{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello"}]
     """
 
-    def __init__(self, filepath, **kwargs):
+    def __init__(self, filepath, stop=None, **kwargs):
         super().__init__(**kwargs)
         self.filepath = filepath
         self.conversations = []
@@ -33,7 +33,9 @@ class CustomJSON(Task):
 
         else:
             with open(filepath, 'r', encoding='utf-8') as f:
-                for line in f:
+                for line_num, line in enumerate(f):
+                    if stop is not None and line_num >= stop:
+                        break
                     line = line.strip()
                     if not line:  # skip empty lines
                         continue
